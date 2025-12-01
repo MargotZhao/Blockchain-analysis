@@ -173,7 +173,7 @@
 
         <div class="search-panel">
             <h2>🔍 Search Any Wallet</h2>
-            <input type="text" id="walletAddress" placeholder="Enter wallet address (e.g., 0x742d35cc...)">
+            <input type="text" id="searchWalletInput" placeholder="Enter wallet address (e.g., 0x742d35cc...)">
             <button onclick="searchWallet()">Search</button>
         </div>
         
@@ -455,7 +455,7 @@
         }
 
         // ====================================================================
-        // ORIGINAL QUERY FUNCTIONS
+        // QUERY FUNCTIONS
         // ====================================================================
         
         function showLoading(message = 'Loading...') {
@@ -469,7 +469,7 @@
         }
 
         async function searchWallet() {
-            const address = document.getElementById('walletAddress').value.trim();
+            const address = document.getElementById('searchWalletInput').value.trim();
             searchWalletDirect(address);
         }
 
@@ -572,7 +572,7 @@
 
         // Allow Enter key to search
         document.addEventListener('DOMContentLoaded', function() {
-            const walletInput = document.getElementById('walletAddress');
+            const walletInput = document.getElementById('searchWalletInput');
             if (walletInput) {
                 walletInput.addEventListener('keypress', function(e) {
                     if (e.key === 'Enter') {
