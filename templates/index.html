@@ -2,64 +2,90 @@
 <html>
 <head>
     <title>CryptoGraph Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
         body {
-            font-family: Arial, sans-serif;
-            max-width: 1200px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1400px;
             margin: 0 auto;
             padding: 20px;
-            background-color: #f5f5f5;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .main-container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
         }
         h1 {
             color: #333;
-            border-bottom: 3px solid #4CAF50;
-            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
+            margin-top: 0;
+            font-size: 32px;
         }
         h2 {
             color: #555;
             margin-top: 30px;
+            font-size: 22px;
         }
         .search-panel, .query-panel {
-            background: white;
+            background: #f8f9fa;
             padding: 20px;
             border-radius: 8px;
             margin: 20px 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border: 1px solid #e0e0e0;
         }
         input[type="text"] {
             width: 400px;
-            padding: 10px;
+            padding: 12px;
             font-size: 14px;
             border: 2px solid #ddd;
-            border-radius: 4px;
+            border-radius: 6px;
+            transition: border-color 0.3s;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
         }
         button {
-            padding: 10px 20px;
+            padding: 12px 24px;
             margin: 5px;
             font-size: 14px;
-            background-color: #4CAF50;
+            background-color: #667eea;
             color: white;
             border: none;
-            border-radius: 4px;
+            border-radius: 6px;
             cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
         }
         button:hover {
-            background-color: #45a049;
+            background-color: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            transform: none;
         }
         #results {
             background: white;
             padding: 20px;
             border-radius: 8px;
             margin-top: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border: 1px solid #e0e0e0;
         }
         pre {
             background: #f4f4f4;
             padding: 15px;
-            border-radius: 4px;
+            border-radius: 6px;
             overflow-x: auto;
             font-size: 12px;
             line-height: 1.5;
+            border: 1px solid #ddd;
         }
         .loading {
             color: #666;
@@ -68,61 +94,404 @@
         .error {
             color: #d32f2f;
             background: #ffebee;
-            padding: 10px;
-            border-radius: 4px;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #d32f2f;
+        }
+        .success {
+            color: #2e7d32;
+            background: #e8f5e9;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #2e7d32;
         }
     </style>
 </head>
 <body>
-    <h1>CryptoGraph: Blockchain Analytics</h1>
-    
-    <div class="search-panel">
-        <h2>Search Wallet</h2>
-        <input type="text" id="walletAddress" placeholder="Enter wallet address (e.g., 0x742d35cc...)">
-        <button onclick="searchWallet()">Search</button>
+    <div class="main-container">
+        <h1>🔗 CryptoGraph: Blockchain Analytics</h1>
+        
+        <!-- MetaMask Connection Section -->
+        <div class="wallet-section">
+            <h2>🦊 Connect Your Wallet</h2>
+            
+            <!-- Not Connected State -->
+            <div id="notConnected">
+                <p style="margin: 10px 0;">Connect your MetaMask wallet to view personalized analytics for your Ethereum address</p>
+                <button id="connectWallet" class="btn-metamask">
+                    <span>🦊</span>
+                    <span>Connect MetaMask</span>
+                </button>
+                <div id="installMetaMask" style="display:none;" class="alert alert-warning">
+                    ⚠️ MetaMask not detected. 
+                    <a href="https://metamask.io/download/" target="_blank" style="color: #856404; text-decoration: underline; font-weight: bold;">
+                        Install MetaMask Extension
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Connected State -->
+            <div id="connected" style="display:none;">
+                <div class="wallet-info">
+                    <p style="margin: 5px 0;"><strong>Connected Wallet:</strong></p>
+                    <div class="wallet-address" id="walletAddress"></div>
+                    <p style="margin: 10px 0 5px 0;"><strong>Balance:</strong> <span id="walletBalance">0</span> ETH</p>
+                    <p style="margin: 5px 0;"><strong>Network:</strong> <span id="networkName">Ethereum Mainnet</span></p>
+                    
+                    <div style="margin-top: 15px;">
+                        <button id="disconnectWallet" class="btn-secondary">Disconnect</button>
+                        <button id="refreshData" class="btn-secondary">🔄 Refresh Data</button>
+                        <button id="exportData" class="btn-secondary">📥 Export My Data</button>
+                    </div>
+                </div>
+                
+                <!-- User Stats -->
+                <div class="stats-grid" id="userStats" style="display:none;">
+                    <div class="stat-card highlight">
+                        <h3>Total Sent</h3>
+                        <p id="totalSent">0 ETH</p>
+                    </div>
+                    <div class="stat-card highlight">
+                        <h3>Total Received</h3>
+                        <p id="totalReceived">0 ETH</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Net Flow</h3>
+                        <p id="netFlow">0 ETH</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Transactions</h3>
+                        <p id="txCount">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Unique Contacts</h3>
+                        <p id="connections">0</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="search-panel">
+            <h2>🔍 Search Any Wallet</h2>
+            <input type="text" id="walletAddress" placeholder="Enter wallet address (e.g., 0x742d35cc...)">
+            <button onclick="searchWallet()">Search</button>
+        </div>
+        
+        <div class="query-panel">
+            <h2>📊 Analytics Queries</h2>
+            <button onclick="getTopWallets()">Top 10 Wallets</button>
+            <button onclick="getHighValueTx()">High-Value Transactions</button>
+            <button onclick="getMarketData()">Market Data</button>
+            <button onclick="getGraphSummary()">Graph Summary</button>
+            <button onclick="runClustering()">Run ML Clustering</button>
+            <button id="myTransactionsBtn" style="display:none; background: #f6851b;" onclick="getMyTransactions()">
+                🔒 My Transactions
+            </button>
+            <button id="myNetworkBtn" style="display:none; background: #f6851b;" onclick="getMyNetwork()">
+                🕸️ My Network
+            </button>
+        </div>
+        
+        <div id="results">
+            <p style="color: #999;">Click a button above to run a query or connect your wallet for personalized analytics...</p>
+        </div>
     </div>
-    
-    <div class="query-panel">
-        <h2>Quick Queries</h2>
-        <button onclick="getTopWallets()">Top 10 Wallets</button>
-        <button onclick="getHighValueTx()">High-Value Transactions</button>
-        <button onclick="getMarketData()">Market Data</button>
-        <button onclick="getGraphSummary()">Graph Summary</button>
-        <button onclick="runClustering()">Run ML Clustering</button>
-    </div>
-    
-    <div id="results"></div>
     
     <script>
-        function showLoading() {
+        // ====================================================================
+        // METAMASK INTEGRATION
+        // ====================================================================
+        
+        let userAddress = null;
+        let web3 = null;
+
+        // Check if MetaMask is installed on page load
+        window.addEventListener('load', async () => {
+            if (typeof window.ethereum !== 'undefined') {
+                console.log('✅ MetaMask is installed!');
+                web3 = window.ethereum;
+                
+                // Check if already connected (persisted connection)
+                try {
+                    const accounts = await ethereum.request({ method: 'eth_accounts' });
+                    if (accounts.length > 0) {
+                        console.log('Found existing connection');
+                        handleAccountsChanged(accounts);
+                    }
+                } catch (error) {
+                    console.error('Error checking accounts:', error);
+                }
+            } else {
+                console.log('❌ MetaMask not detected');
+                document.getElementById('installMetaMask').style.display = 'block';
+                document.getElementById('connectWallet').disabled = true;
+            }
+        });
+
+        // Connect Wallet Button Click
+        document.getElementById('connectWallet').addEventListener('click', async () => {
+            try {
+                console.log('Requesting MetaMask connection...');
+                const accounts = await ethereum.request({ 
+                    method: 'eth_requestAccounts' 
+                });
+                handleAccountsChanged(accounts);
+            } catch (error) {
+                console.error('Error connecting to MetaMask:', error);
+                if (error.code === 4001) {
+                    alert('Connection rejected. Please approve the connection in MetaMask.');
+                } else {
+                    alert('Failed to connect: ' + error.message);
+                }
+            }
+        });
+
+        // Handle account changes (connect/disconnect/switch)
+        async function handleAccountsChanged(accounts) {
+            if (accounts.length === 0) {
+                // User disconnected
+                console.log('Wallet disconnected');
+                document.getElementById('notConnected').style.display = 'block';
+                document.getElementById('connected').style.display = 'none';
+                document.getElementById('userStats').style.display = 'none';
+                document.getElementById('myTransactionsBtn').style.display = 'none';
+                document.getElementById('myNetworkBtn').style.display = 'none';
+                userAddress = null;
+            } else {
+                // Connected or account changed
+                userAddress = accounts[0];
+                console.log('Connected to wallet:', userAddress);
+                
+                document.getElementById('notConnected').style.display = 'none';
+                document.getElementById('connected').style.display = 'block';
+                document.getElementById('myTransactionsBtn').style.display = 'inline-block';
+                document.getElementById('myNetworkBtn').style.display = 'inline-block';
+                
+                // Display shortened address
+                const shortAddress = userAddress.substring(0, 6) + '...' + userAddress.substring(38);
+                document.getElementById('walletAddress').textContent = shortAddress;
+                document.getElementById('walletAddress').title = userAddress; // Full address on hover
+                
+                // Get balance
+                await updateBalance();
+                
+                // Get network
+                await updateNetwork();
+                
+                // Load user's transaction data from our database
+                await loadUserData();
+            }
+        }
+
+        // Update ETH balance from blockchain
+        async function updateBalance() {
+            try {
+                const balance = await ethereum.request({
+                    method: 'eth_getBalance',
+                    params: [userAddress, 'latest']
+                });
+                const ethBalance = parseInt(balance, 16) / 1e18;
+                document.getElementById('walletBalance').textContent = ethBalance.toFixed(4);
+            } catch (error) {
+                console.error('Error getting balance:', error);
+                document.getElementById('walletBalance').textContent = 'Error';
+            }
+        }
+
+        // Update network name
+        async function updateNetwork() {
+            try {
+                const chainId = await ethereum.request({ method: 'eth_chainId' });
+                const networks = {
+                    '0x1': 'Ethereum Mainnet',
+                    '0x5': 'Goerli Testnet',
+                    '0xaa36a7': 'Sepolia Testnet',
+                    '0x89': 'Polygon Mainnet',
+                    '0x38': 'BSC Mainnet',
+                };
+                const networkName = networks[chainId] || `Unknown Network (${chainId})`;
+                document.getElementById('networkName').textContent = networkName;
+                
+                // Warn if not on mainnet
+                if (chainId !== '0x1') {
+                    console.warn('Not on Ethereum Mainnet. Transaction data may not be available.');
+                }
+            } catch (error) {
+                console.error('Error getting network:', error);
+                document.getElementById('networkName').textContent = 'Unknown';
+            }
+        }
+
+        // Load user's data from our MongoDB database
+        async function loadUserData() {
+            try {
+                showLoading('Loading your transaction data...');
+                
+                const response = await fetch(`/api/wallet/${userAddress}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('Error loading user data:', data.error);
+                    document.getElementById('results').innerHTML = 
+                        `<div class="error">Could not load transaction data: ${data.error}</div>`;
+                    return;
+                }
+                
+                // Show stats section
+                document.getElementById('userStats').style.display = 'grid';
+                
+                // Update stats
+                document.getElementById('totalSent').textContent = 
+                    data.total_sent_eth.toFixed(4) + ' ETH';
+                document.getElementById('totalReceived').textContent = 
+                    data.total_received_eth.toFixed(4) + ' ETH';
+                document.getElementById('netFlow').textContent = 
+                    data.net_flow_eth.toFixed(4) + ' ETH';
+                document.getElementById('txCount').textContent = 
+                    data.transaction_count;
+                document.getElementById('connections').textContent = 
+                    data.unique_counterparties;
+                
+                // Show summary in results
+                document.getElementById('results').innerHTML = `
+                    <div class="success">
+                        <h3>✅ Wallet Connected Successfully!</h3>
+                        <p>Found <strong>${data.transaction_count}</strong> transactions for your wallet in our database.</p>
+                        <p>Click "My Transactions" or "My Network" to explore your data.</p>
+                    </div>
+                `;
+                
+            } catch (error) {
+                console.error('Error loading user data:', error);
+                document.getElementById('results').innerHTML = 
+                    `<div class="error">Error loading data: ${error.message}</div>`;
+            }
+        }
+
+        // Disconnect wallet
+        document.getElementById('disconnectWallet').addEventListener('click', () => {
+            userAddress = null;
+            document.getElementById('notConnected').style.display = 'block';
+            document.getElementById('connected').style.display = 'none';
+            document.getElementById('userStats').style.display = 'none';
+            document.getElementById('myTransactionsBtn').style.display = 'none';
+            document.getElementById('myNetworkBtn').style.display = 'none';
             document.getElementById('results').innerHTML = 
-                '<p class="loading">Loading...</p>';
+                '<p style="color: #999;">Wallet disconnected. Click a button above to run queries...</p>';
+        });
+
+        // Refresh data button
+        document.getElementById('refreshData').addEventListener('click', async () => {
+            await updateBalance();
+            await loadUserData();
+        });
+
+        // Export data button
+        document.getElementById('exportData').addEventListener('click', async () => {
+            try {
+                showLoading('Preparing export...');
+                
+                const response = await fetch(`/api/wallet/${userAddress}/export`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    showError(data.error);
+                    return;
+                }
+                
+                // Create and download JSON file
+                const blob = new Blob([JSON.stringify(data, null, 2)], 
+                    { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `wallet_${userAddress}_export_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                document.getElementById('results').innerHTML = 
+                    `<div class="success">✅ Exported ${data.transaction_count} transactions successfully!</div>`;
+            } catch (error) {
+                console.error('Error exporting data:', error);
+                showError('Export failed: ' + error.message);
+            }
+        });
+
+        // Listen for MetaMask events
+        if (typeof ethereum !== 'undefined') {
+            ethereum.on('accountsChanged', handleAccountsChanged);
+            ethereum.on('chainChanged', () => {
+                console.log('Network changed, reloading...');
+                window.location.reload();
+            });
+        }
+
+        // Get my transactions
+        async function getMyTransactions() {
+            if (!userAddress) {
+                alert('Please connect your wallet first!');
+                return;
+            }
+            searchWalletDirect(userAddress);
+        }
+
+        // Get my network
+        async function getMyNetwork() {
+            if (!userAddress) {
+                alert('Please connect your wallet first!');
+                return;
+            }
+            
+            showLoading('Loading your network connections...');
+            try {
+                const response = await fetch(`/api/wallet/${userAddress}/network`);
+                const data = await response.json();
+                displayResults(data, 'Your Network Analysis');
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        // ====================================================================
+        // ORIGINAL QUERY FUNCTIONS
+        // ====================================================================
+        
+        function showLoading(message = 'Loading...') {
+            document.getElementById('results').innerHTML = 
+                `<p class="loading">${message}</p>`;
         }
 
         function showError(message) {
             document.getElementById('results').innerHTML = 
-                '<div class="error">Error: ' + message + '</div>';
+                `<div class="error">Error: ${message}</div>`;
         }
 
         async function searchWallet() {
             const address = document.getElementById('walletAddress').value.trim();
+            searchWalletDirect(address);
+        }
+
+        async function searchWalletDirect(address) {
             if (!address) {
                 showError('Please enter a wallet address');
                 return;
             }
             
-            showLoading();
+            showLoading('Searching for wallet transactions...');
             try {
                 const response = await fetch(`/api/transactions/${address}`);
                 const data = await response.json();
                 
                 if (data.length === 0) {
                     displayResults({
-                        message: 'No transactions found for this wallet',
-                        wallet: address
-                    });
+                        message: 'No transactions found for this wallet in our database',
+                        wallet: address,
+                        note: 'This wallet may not have been indexed yet'
+                    }, 'Search Results');
                 } else {
-                    displayResults(data);
+                    displayResults(data, `Wallet Transactions (${data.length} found)`);
                 }
             } catch (error) {
                 showError(error.message);
@@ -130,74 +499,71 @@
         }
         
         async function getTopWallets() {
-            showLoading();
+            showLoading('Finding top wallets...');
             try {
                 const response = await fetch('/api/top_wallets');
                 const data = await response.json();
-                displayResults(data);
+                displayResults(data, 'Top 10 Most Active Wallets');
             } catch (error) {
                 showError(error.message);
             }
         }
         
         async function getHighValueTx() {
-            showLoading();
+            showLoading('Finding high-value transactions...');
             try {
                 const response = await fetch('/api/high_value_transactions');
                 const data = await response.json();
-                displayResults(data);
+                displayResults(data, 'High-Value Transactions (>0.001 ETH)');
             } catch (error) {
                 showError(error.message);
             }
         }
 
         async function getMarketData() {
-            showLoading();
+            showLoading('Fetching market data...');
             try {
                 const response = await fetch('/api/market');
                 const data = await response.json();
-                displayResults(data);
+                displayResults(data, 'Cryptocurrency Market Data');
             } catch (error) {
                 showError(error.message);
             }
         }
 
         async function getGraphSummary() {
-            showLoading();
+            showLoading('Analyzing graph database...');
             try {
                 const response = await fetch('/api/graph_summary');
                 const data = await response.json();
-                displayResults(data);
+                displayResults(data, 'Graph Database Summary');
             } catch (error) {
                 showError(error.message);
             }
         }
         
         async function runClustering() {
-            showLoading();
-            document.getElementById('results').innerHTML = 
-                '<p class="loading">Running ML clustering... This may take a moment...</p>';
+            showLoading('Running ML clustering analysis... This may take a moment...');
             
             try {
                 const response = await fetch('/api/run_clustering', {
                     method: 'POST'
                 });
                 const data = await response.json();
-                displayResults(data);
+                displayResults(data, 'ML Clustering Results');
             } catch (error) {
                 showError(error.message);
             }
         }
         
-        function displayResults(data) {
+        function displayResults(data, title = 'Results') {
             const resultsDiv = document.getElementById('results');
             
-            // Format the data nicely
-            let html = '<h3>Results:</h3>';
+            let html = `<h3>${title}</h3>`;
             
-            // Check if it's an array
+            // Show count if it's an array
             if (Array.isArray(data)) {
-                html += `<p>Found ${data.length} results</p>`;
+                html += `<p style="color: #666;">Found <strong>${data.length}</strong> results</p>`;
             }
             
             html += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
@@ -206,11 +572,14 @@
 
         // Allow Enter key to search
         document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('walletAddress').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    searchWallet();
-                }
-            });
+            const walletInput = document.getElementById('walletAddress');
+            if (walletInput) {
+                walletInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        searchWallet();
+                    }
+                });
+            }
         });
     </script>
 </body>

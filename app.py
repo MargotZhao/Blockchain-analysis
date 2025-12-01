@@ -1,10 +1,18 @@
-# app.py - COMPLETE VERSION WITH ALL ENDPOINTS
+# app.py - COMPLETE VERSION WITH METAMASK INTEGRATION
 from flask import Flask, jsonify, request, render_template
 from queries import mongo_queries, neo4j_queries
 from bson import ObjectId
 from datetime import datetime
+import config
+from pymongo import MongoClient
+from py2neo import Graph
 
 app = Flask(__name__)
+
+# Database connections
+mongo_client = MongoClient(config.MONGO_URI)
+db = mongo_client[config.MONGO_DB]
+graph = Graph(config.NEO4J_URI, auth=(config.NEO4J_USER, config.NEO4J_PASSWORD))
 
 def serialize_doc(doc):
     """Convert MongoDB document to JSON-serializable format"""
@@ -81,6 +89,128 @@ def run_clustering():
             'status': 'error',
             'message': str(e)
         })
+
+# ============================================================================
+# NEW METAMASK ENDPOINTS
+# ============================================================================
+
+@app.route('/api/wallet/<address>')
+def get_wallet_info(address):
+    """Get comprehensive wallet info when user connects MetaMask"""
+    
+    # Validate Ethereum address format
+    if not address.startswith('0x') or len(address) != 42:
+        return jsonify({'error': 'Invalid Ethereum address'}), 400
+    
+    address = address.lower()  # Normalize to lowercase
+    
+    try:
+        # Get transactions from MongoDB
+        from_txs = list(db.transactions.find({'from': address}).sort('timestamp', -1))
+        to_txs = list(db.transactions.find({'to': address}).sort('timestamp', -1))
+        
+        # Calculate statistics
+        total_sent = sum(tx.get('value_eth', 0) for tx in from_txs)
+        total_received = sum(tx.get('value_eth', 0) for tx in to_txs)
+        
+        # Get unique counterparties
+        sent_to = set(tx['to'] for tx in from_txs if 'to' in tx)
+        received_from = set(tx['from'] for tx in to_txs if 'from' in tx)
+        unique_counterparties = len(sent_to.union(received_from))
+        
+        # Combine and sort all transactions
+        all_txs = from_txs + to_txs
+        all_txs.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        
+        # Remove MongoDB _id for JSON serialization
+        for tx in all_txs:
+            if '_id' in tx:
+                tx['_id'] = str(tx['_id'])
+        
+        return jsonify({
+            'address': address,
+            'transaction_count': len(all_txs),
+            'total_sent_eth': round(total_sent, 6),
+            'total_received_eth': round(total_received, 6),
+            'net_flow_eth': round(total_received - total_sent, 6),
+            'unique_counterparties': unique_counterparties,
+            'recent_transactions': all_txs[:20],  # Last 20 transactions
+            'first_seen': all_txs[-1].get('timestamp') if all_txs else None,
+            'last_seen': all_txs[0].get('timestamp') if all_txs else None
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/wallet/<address>/network')
+def get_wallet_network(address):
+    """Get Neo4j network analysis for connected wallet"""
+    
+    if not address.startswith('0x') or len(address) != 42:
+        return jsonify({'error': 'Invalid Ethereum address'}), 400
+    
+    address = address.lower()
+    
+    try:
+        # Get direct connections
+        query = """
+        MATCH (w:Wallet {address: $address})-[r:SENT]-(other:Wallet)
+        RETURN other.address as connected_wallet, 
+               count(r) as transaction_count,
+               sum(r.value) as total_volume
+        ORDER BY transaction_count DESC
+        LIMIT 20
+        """
+        
+        result = graph.run(query, address=address).data()
+        
+        # Get wallet's centrality metrics
+        centrality_query = """
+        MATCH (w:Wallet {address: $address})-[r]-()
+        RETURN count(r) as degree
+        """
+        
+        centrality = graph.run(centrality_query, address=address).data()
+        degree = centrality[0]['degree'] if centrality else 0
+        
+        return jsonify({
+            'address': address,
+            'direct_connections': len(result),
+            'degree_centrality': degree,
+            'connected_wallets': result
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/wallet/<address>/export')
+def export_wallet_data(address):
+    """Export wallet transaction history as JSON"""
+    
+    if not address.startswith('0x') or len(address) != 42:
+        return jsonify({'error': 'Invalid Ethereum address'}), 400
+    
+    address = address.lower()
+    
+    try:
+        # Get all transactions
+        all_txs = list(db.transactions.find({
+            '$or': [{'from': address}, {'to': address}]
+        }).sort('timestamp', -1))
+        
+        # Clean for export
+        for tx in all_txs:
+            tx['_id'] = str(tx['_id'])
+        
+        return jsonify({
+            'wallet': address,
+            'export_date': datetime.now().isoformat(),
+            'transaction_count': len(all_txs),
+            'transactions': all_txs
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
