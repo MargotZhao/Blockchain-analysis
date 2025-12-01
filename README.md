@@ -225,11 +225,6 @@ source venv/bin/activate
 pip install pymongo py2neo flask requests pandas scikit-learn python-dotenv
 ```
 
-Or using requirements.txt:
-
-```bash
-pip install -r requirements.txt
-```
 
 ### Step 4: Configure API Keys
 
@@ -862,7 +857,7 @@ python load_data.py
 
 **Margot Zhao**  
 Data Science Institute, Vanderbilt University  
-Email: [your-email@vanderbilt.edu]
+Email: [siyang.zhao@vanderbilt.edu]
 
 ---
 
